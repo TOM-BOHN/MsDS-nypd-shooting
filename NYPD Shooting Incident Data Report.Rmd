@@ -1,0 +1,711 @@
+---
+title: "NYPD Shooting Incidents"
+author: "Thomas Bohn"
+date: "2023-04-20"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+### Data Science Process
+
+The following report follows the Data Science Process from beginning to end, ensuring there is a discussion on the following areas in the flow:
+
+* Import
+* Tidy
+* Transform
+* Visualize
+* Model
+* Communicate
+
+### Overview of Report Structure
+
+The following report will contain the following sections:
+
+* __Background__: Why should I care?
+* __Data Source__: Where is your data from?
+* __Tidying and Transform the Data__: How has the data been cleaned and transformed?
+* __Analysis and Visualizations__: What does it tell you?
+* __Models & Conclusions__: What do you conclude?
+* __Review of Bias__: How could you be wrong?
+
+By including comprehensive details in a well structured document, the results and findings of this analysis should be reproducible for any user.
+
+### R Libraries Utilized
+
+The analysis in this report will utilize the following libraries in R for Data Analysis:
+
+```{r library, echo=TRUE, message=FALSE}
+library(tidyverse)
+library(lubridate)
+library(tinytex)
+```
+
+## Background
+
+### What is an NYPD Shooting Incident
+
+Each record represents a shooting incident in NYC and includes information about the event, the location and time of occurrence. In addition, information related to suspect and victim demographics is also included. 
+
+Each incident is described with the following attributes:
+
+* __INCIDENT_KEY__: Randomly generated persistent ID for each arrest
+* __OCCUR_DATE__: Exact date of the shooting incident
+* __OCCUR_TIME__: Exact time of the shooting incident
+* __BORO__: Borough where the shooting incident occurred
+* __PRECINCT__: Precinct where the shooting incident occurred
+* __JURISDICTION_CODE__: Jurisdiction where the shooting incident occurred. Jurisdiction codes 0(Patrol), 1(Transit) and 2(Housing) represent NYPD whilst codes 3 and more represent non NYPD jurisdictions
+* __LOCATION_DESC__: Location of the shooting incident
+* __STATISTICAL_MURDER_FLAG__: Shooting resulted in the victim’s death which would be counted as a murder
+* __PERP_AGE_GROUP__: Perpetrator’s age within a category
+* __PERP_SEX__: Perpetrator’s sex description
+* __PERP_RACE__: Perpetrator’s race description
+* __VIC_AGE_GROUP__: Victim’s age within a category
+* __VIC_SEX__: Victim’s sex description
+* __VIC_RACE__: Victim’s race description
+* __X_COORD_CD__: Midblock X-coordinate for New York State Plane Coordinate System, Long Island Zone, NAD 83, units feet (FIPS 3104)
+* __Y_COORD_CD__: Midblock Y-coordinate for New York State Plane Coordinate System, Long Island Zone, NAD 83, units feet (FIPS 3104)
+* __Latitude__: Latitude coordinate for Global Coordinate System, WGS 1984, decimal degrees (EPSG 4326) 
+* __Longitude__: Longitude coordinate for Global Coordinate System, WGS 1984, decimal degrees (EPSG 4326)
+* __Lon_Lat__: Longitude and Latitude Coordinates for mapping
+
+## Data Source
+
+### Source of Data
+
+The data used for the analysis is sourced from <https://catalog.data.gov/dataset> and provided by __NYC OpenData__. The data source is described as:
+
+>List of every shooting incident that occurred in NYC going back to 2006 through the end of the previous calendar year.
+>
+>This is a breakdown of every shooting incident that occurred in NYC going back to 2006 through the end of the previous calendar year. This data is manually extracted every quarter and reviewed by the Office of Management Analysis and Planning before being posted on the NYPD website.
+>
+>Each record represents a shooting incident in NYC and includes information about the event, the location and time of occurrence. In addition, information related to suspect and victim demographics is also included.
+>
+>This data can be used by the public to explore the nature of shooting/criminal activity.
+
+It can be found the following the following Github URL:
+<https://catalog.data.gov/dataset/nypd-shooting-incident-data-historic> 
+
+### Import the Data to R
+
+```{r build_urls, echo=TRUE, message=FALSE}
+#Build URLs to access the data from the web
+url <- "https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv?accessType=DOWNLOAD"
+```
+
+```{r read_data, echo=TRUE, message=FALSE}
+#Read in the data to datasets
+nypd <- read_csv(url)
+```
+
+```{r head_data, echo=TRUE}
+#Preview the dataset
+head(nypd)
+```
+## Tidying and Transform the Data
+
+The following outlines how the data was modified to be tidy and transformed to contain variables for further analysis.  This section contains:
+
+* A summary of the data
+* Clean up of the dataset by changing appropriate variables to factors, updating date types, and getting rid of any columns not needed
+* Transforming the data to add useful variables and derived elements
+* Summary of the data to be sure there is no missing data
+
+### Data Summerization
+
+```{r preview_data, echo=TRUE}
+#Preview the data set in R
+glimpse(nypd)
+```
+
+```{r summary_data, echo=TRUE}
+#Summary of the NYPD Shootings Incidents Dataset
+summary(nypd)
+```
+
+```{r display_column_names, echo=TRUE}
+#Show the column names of the columns in NYPD Shootings Incidents data sets
+nypd_cols <- colnames(nypd)
+nypd_cols <- str_to_lower(nypd_cols)
+nypd_cols
+```
+
+### Profile the Data
+
+```{r profile_data, echo=TRUE}
+#Profile some base data variables in the data set
+nypd %>% count(BORO)
+nypd %>% count(JURISDICTION_CODE)
+nypd %>% count(STATISTICAL_MURDER_FLAG)
+nypd %>% count(PERP_AGE_GROUP)
+nypd %>% count(PERP_SEX)
+nypd %>% count(PERP_RACE)
+nypd %>% count(VIC_AGE_GROUP)
+nypd %>% count(VIC_SEX)
+nypd %>% count(VIC_RACE)
+nypd %>% count(LOCATION_DESC)
+```
+
+### Scope for Initial Tidy
+
+List of initial tidy adjustments to make:
+
+* Adjust Header names to be lower case
+* INCIDENT_KEY cast as Int
+* OCCUR_DATE parsed as Date and OCCUR_TIME parsed as time
+* Mixed Case for Boro and set as Factor
+* Map JURISDICTION_CODE to Factor Values
+* Map PERP_AGE_GROUP, PERP_SEX, PERP_RACE, VIC_AGE_GROUP, VIC_SEX, VIC_RACE as Factors
+* Derive year, month, hour, minute data
+Drop LOCATION_DESC and Geo information
+
+### Data Quality Isseus
+
+The following data issues are observed but will not be changed in the data source:
+
+* 9,344 perp age groups missing (NA)
+* 9,310 perp sex missing (NA)
+* 9,310 perp race missing (NA)
+
+Since the above values are related to the perpetrator of the shooting, and are relatively similar in size, it can be assumed that NA indicates not perpetrator was identified.  These values should still remain in the dataset as they are still valid incidents.  They are also different than unknown, where a perpetrator was identified, but the witness or victim could not identify the demographic details.
+
+
+The following items will remain as NA but will be outside of the factor levels:
+
+* 2 missing jurisdiction codes (NA)
+* Perp Age Groups out of domain (value of 1020, 224, 940)
+
+These records will remain, but will be mapped to NA as there is no logic mapping for them.
+
+The following variable will be dropped from the dataset:
+
+* 14,977 location description missing (NA)
+
+There are too many missing values from this attribute to be useful for analysis.  It is possible it could be used in the future, if further relationships can be identified that justify why there are so many NA values.
+
+### Tidy the NYPD Shootings Incidents Data
+
+```{r tidy_factor_levels, echo=TRUE}
+#Define the factor levels to use in the tify process
+f_sex = c("M", "F", "U")
+f_age_group = c("<18", "18-24", "25-44", "45-64", "65+", "Unknown")
+f_boro = c("Manhattan", "Brooklyn", "Queens",
+           "Bronx", "Staten Island", "Unknown")
+f_race = c("White", "Black", "American Indian/Alaskan Native",
+           "Asian / Pacific Islander", "Unknown")
+f_ethn = c("Hispanic or Latino", "Not Hispanic or Latino", "Unknown")
+f_jur = c("Patrol", "Transit", "Housing", "Other")
+f_month = c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
+            "Aug", "Sep", "Oct", "Nov", "Dec")
+```
+
+```{r tidy_incidents, echo=TRUE}
+#Tidy the dataset
+tidy_nypd <- nypd %>%
+  #Adjust Header names to be lower case
+  rename_with(tolower) %>%
+  #incident_key and precinct cast as int
+  mutate(incident_key = as.integer(incident_key)) %>%
+  mutate(precinct = as.integer(precinct)) %>%
+  #occur_date parsed as date and occur_time parsed as time
+  mutate(occur_date = parse_date(occur_date, format = "%m/%d/%Y")) %>%
+  mutate(occur_time = parse_time(as.character(occur_time)))  %>%
+  #mixed case for boro and set as Factor
+  mutate(boro = str_to_title(boro)) %>%
+  mutate(boro = factor(boro, levels = f_boro)) %>%
+  #Map jurisdiction_code to Factor Values
+  #0(Patrol), 1(Transit) and 2(Housing) represent NYPD
+  #whilst codes 3 and more represent non NYPD jurisdictions
+  mutate(jurisdiction = fct_recode(as.character(jurisdiction_code),
+                                    "Patrol" = "0",
+                                    "Transit" = "1",
+                                    "Housing" = "2"
+                                   ),
+         .after = jurisdiction_code
+   ) %>%
+  mutate(jurisdiction = factor(jurisdiction, levels = f_jur)) %>%
+  #Map perp_age_group, perp_sex, perp_race, vic_age_group,
+  #vic_sex, vic_race as Factors
+  mutate(perp_sex = factor(perp_sex, levels = f_sex)) %>%
+  mutate(vic_sex = factor(vic_sex, levels = f_sex)) %>%
+  mutate(perp_age_group = factor(str_to_title(perp_age_group),
+                                 levels = f_age_group)) %>%
+  mutate(vic_age_group = factor(str_to_title(vic_age_group),
+                                levels = f_age_group)) %>%
+  #Drop columns not needed for analysis
+  select(-c("location_desc", "x_coord_cd", "y_coord_cd",
+            "latitude", "longitude", "lon_lat"))
+```
+
+### Transform the NYPD Shootings Incidents Data
+
+```{r transform_incidents, echo=TRUE}
+tidy_nypd <- tidy_nypd %>%
+  #Map month, year, hour
+  mutate(occur_month = month(occur_date, label = TRUE, abbr = TRUE),
+         .after = occur_date) %>%
+  mutate(occur_year = as.integer(year(occur_date)), .after = occur_date) %>%
+  mutate(occur_year_month = format(as.Date(occur_date), "%Y-%m"),
+         .after = occur_time) %>%
+  mutate(occur_hour = hour(occur_time), .after = occur_time) %>%
+  #Map perp_race to mixed case
+  mutate(perp_race = str_to_title(perp_race)) %>%
+  #Derive perp ethnicity from perp race by
+  #consolidating to Hispanic and not Hispanic
+  mutate(perp_ethn = fct_collapse(perp_race,
+            "Unknown" = c("Unknown"),
+            "Not Hispanic or Latino" = c("White", "Black",
+                                         "American Indian/Alaskan Native",
+                                         "Asian / Pacific Islander"),
+            "Hispanic or Latino" = c("White Hispanic", "Black Hispanic")
+          ),
+         .after = perp_race
+   ) %>%
+  #Turn perp ethnicity into a factor with levels
+  mutate(perp_ethn = factor(perp_ethn, levels = f_ethn)) %>%
+  #Remove Hispanic from perp race
+  mutate(perp_race2 = fct_collapse(perp_race,
+            "White" = c("White", "White Hispanic"),
+            "Black" = c("Black", "Black Hispanic")
+          ),
+         .after = perp_race
+   ) %>%
+  #Turn perp race into a factor with levels
+  mutate(perp_race2 = factor(perp_race2, levels = f_race)) %>%
+  #Rename original field as diversity group
+  rename(perp_diversity_group = perp_race, perp_race = perp_race2) %>%
+  #Map vic_race to mixed case
+  mutate(vic_race = str_to_title(vic_race)) %>%
+  #Derive victim ethnicity from victim race by
+  #consolidating to Hispanic and not Hispanic
+  mutate(vic_ethn = fct_collapse(vic_race,
+            "Unknown" = c("Unknown"),
+            "Not Hispanic or Latino" = c("White", "Black",
+                                         "American Indian/Alaskan Native",
+                                         "Asian / Pacific Islander"),
+            "Hispanic or Latino" = c("White Hispanic", "Black Hispanic")
+          ),
+         .after = vic_race
+   ) %>%
+  #Turn victim ethnicity into a factor with levels
+  mutate(vic_ethn = factor(vic_ethn, levels = f_ethn)) %>%
+  #Remove Hispanic from victim race
+  mutate(vic_race2 = fct_collapse(vic_race,
+            "White" = c("White", "White Hispanic"),
+            "Black" = c("Black", "Black Hispanic")
+          ),
+         .after = vic_race
+   ) %>%
+  #Turn victim race into a factor with levels
+  mutate(vic_race2 = factor(vic_race2, levels = f_race)) %>%
+  #Rename original field as diversity group
+  rename(vic_diversity_group = vic_race, vic_race = vic_race2) 
+```
+
+### Summary of the Tidyed and Transformed Data
+
+```{r preview_final_data, echo=TRUE}
+#Review the overall table after the tidy function
+head(tidy_nypd, n = 5)
+```
+
+```{r summary_final_data, echo=TRUE}
+#Summary of the NYPD Shootings Incidents Dataset
+summary(tidy_nypd)
+```
+
+```{r validate_final_data, echo=TRUE}
+#validate the mapping of diversity group, race, and ethnicity for perps
+tidy_nypd %>% count(perp_diversity_group, perp_race, perp_ethn)
+#validate the mapping of diversity group, race, and ethnicity for victims
+tidy_nypd %>% count(vic_diversity_group, vic_race, vic_ethn)
+#validate the mapping of jurisdiction code and jurisdiction
+tidy_nypd %>% count(jurisdiction_code, jurisdiction)
+
+#validate the mapping of year
+tidy_nypd %>% count(occur_year)
+#validate the mapping of month
+tidy_nypd %>% count(occur_month)
+#validate the mapping of date, year, month
+tidy_nypd %>% count(occur_date, occur_year, occur_month)
+#validate the mapping of hour
+tidy_nypd %>% count(occur_hour)
+
+#validate the mapping of perp and victim age groups
+tidy_nypd %>% count(perp_age_group)
+tidy_nypd %>% count(vic_age_group)
+
+```
+
+## Analysis and Visualizations
+
+Through analysis and visualization, I would like to look at factors and trends that influnce shootings and murders in NYC based on the shooting incident report data source. In order to better understand the conditions for shootings, I'd like to do some analysis around the following areas:
+
+* How many shootings occur per day?
+* What is the trend of shootings over time?
+* What borough has the most shootings?
+* What time of day has the most shootings?
+* what month has the most shootings?
+* What is the most deadly borough?
+* What age group shoots what age group?
+
+### How Many Shootings Occur Each Day in NYC?
+
+```{r shootings_per_year, echo=TRUE, eval=FALSE}
+#Summary of shootings per year
+shootings_per_year <- tidy_nypd %>%
+  group_by(occur_year) %>%
+  summarize(
+    shootings = n(),
+    murders = sum(statistical_murder_flag == TRUE)
+  )
+
+shootings_per_year
+```
+
+```{r shootings_per_day, echo=TRUE}
+#Calculate metrics for shootings per day and murders per day for the year 2021
+shootings_per_day <- tidy_nypd %>%
+  filter(occur_year == 2021) %>%
+  group_by(occur_date, occur_year, occur_month) %>%
+  summarize(
+    shootings = n(),
+    murders = sum(statistical_murder_flag == TRUE)
+  ) %>%
+  group_by(occur_year) %>%
+  summarize(
+    shootings = sum(shootings),
+    murders = sum(murders),
+    shootings_per_day = sum(shootings) / n(),
+    murders_per_day = sum(murders) / n()
+  )
+shootings_per_day
+```
+
+__Conclusion__: On average in 2021 there were 5 shooting incidents each day in New York City and that they resulted in at least 1 or more murders every day.
+
+### What Do Shootings and Murders Look Like Over Time?
+
+```{r nypd_over_time, echo=TRUE}
+#Create a summarized time series of shootings and murders
+nypd_over_time <- tidy_nypd %>%
+  mutate(occur_year_month = as.Date(paste(occur_year_month, "-01", sep=""))) %>%
+  group_by(occur_year_month, occur_year, occur_month) %>%
+  summarize(
+    shootings = n(),
+    murders = sum(statistical_murder_flag == TRUE),
+    pct_murder = sum(statistical_murder_flag == TRUE) / n()
+  )
+nypd_over_time
+```
+
+```{r nypd_over_time_chart, echo=TRUE}
+#Plot the time series
+nypd_over_time %>%
+  ggplot(aes(x = occur_year_month, y = shootings)) +
+  geom_line(aes(color = "shootings")) +
+  geom_point(aes(color = "shootings")) + 
+  geom_line(aes(y = murders, color = "murders")) +
+  geom_point(aes(y = murders, color = "murders")) +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = "New York Shootings and Murders", y = NULL) +
+  xlab("Year-Month") +
+  ylab("Shootings / Murders")
+```
+
+__Conclusion__: After 2000, there was a noticeable increase in shootings on a monthly basis (pulling up murders as well).
+
+### How Do Shootings in Boroughs Change Over Time?
+
+```{r boro_over_time, echo=TRUE}
+#Create a summarized time series of shootings broken out by borough
+boro_over_time <- tidy_nypd %>%
+  filter(occur_year >= 2019) %>%
+  mutate(occur_year_month = as.Date(paste(occur_year_month, "-01", sep=""))) %>%
+  group_by(occur_year, occur_year_month, boro) %>%
+  summarize(
+    shootings = n(),
+    murders = sum(statistical_murder_flag == TRUE),
+    pct_murder = sum(statistical_murder_flag == TRUE) / n()
+  )
+boro_over_time
+```
+
+```{r boro_over_time_plot, echo=TRUE}
+#Plot the time series
+boro_over_time %>%
+  ggplot(aes(x = occur_year_month, y = shootings, fill = boro)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = "New York Shootings by Borough", y = NULL,
+       fill = "Borough") +
+  xlab("Year-Month") +
+  ylab("Shootings")
+```
+
+__Conclusion__: Generally it looks like Brooklyn and the Bronx have the majority of shootings each month, but a different visualization would likely show this more clearly.  Also, in the middle of 2000,there was a clear spike in shoots that were driven largely by changes in Brooklyn.
+
+### What Boroughs Have the Most Shootings After 2020?
+
+```{r boro_shootings, echo=TRUE}
+#Create a dataset of shootings in each borough after 2020
+boro_shootings <- tidy_nypd %>%
+  filter(occur_year >= 2020) %>%
+  group_by(boro) %>%
+  summarize(
+    shootings = n(),
+    murders = sum(statistical_murder_flag == TRUE),
+    pct_murder = round(sum(murders) / sum(shootings) * 100, digits = 1)
+  )
+boro_shootings
+```
+```{r boro_shootings_math, echo=TRUE}
+#Write the summary of the where shootings occur
+b_b_shootings = boro_shootings[boro_shootings$boro == "Brooklyn", ]$shootings +
+  boro_shootings[boro_shootings$boro == "Bronx", ]$shootings
+all_shootings = sum(boro_shootings$shootings)
+pct_shootings = round(b_b_shootings / all_shootings * 100, 0)
+
+print(paste0("There where ", b_b_shootings ,
+             " shootings in Brooklyn and the Bronx, which account for ",
+             pct_shootings, "% of the overall ", all_shootings,
+             " shootings that occured in NYC."))
+```
+
+```{r boro_shootings_plot, echo=TRUE}
+#Plot the Bar Chart
+boro_shootings %>%
+  ggplot(aes(x = reorder(boro, -shootings), y = shootings, fill = boro)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = "New York Shootings by Borough", y = NULL,
+       fill = "Borough") +
+  xlab("Borough") +
+  ylab("Shootings")
+```
+
+__Conclusion__: The Bronx and Brooklyn tend to account for the majority of the shooting incidents in NYC.
+
+### What is the Worst Time of Day for Shootings After 2020?
+
+```{r hour_shootings, echo=TRUE}
+#Create a dataset of shootings in each hour after 2020
+hour_shootings <- tidy_nypd %>%
+  filter(occur_year >= 2020) %>%
+  group_by(occur_hour) %>%
+  summarize(
+    shootings = n(),
+    murders = sum(statistical_murder_flag == TRUE),
+    pct_murder = round(sum(murders) / sum(shootings) * 100, digits = 1)
+  )
+hour_shootings
+```
+
+```{r hour_shootings_plot, echo=TRUE}
+#Plot the Bar Chart
+hour_shootings %>%
+  ggplot(aes(x = occur_hour, y = shootings, fill = shootings)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = "New York Shootings by Hour", y = NULL,
+       fill = "Shootings") +
+  xlab("Hour of Day") +
+  ylab("Shootings")
+```
+__Conclusion__: The 3 worst hours of the day for shootings are 10pm, 11pm, and 12pm.
+
+### What is the Worst Month of the Year for Shootings After 2020?
+
+```{r month_shootings, echo=TRUE}
+#Create a dataset of shootings in each hour after 2020
+month_shootings <- tidy_nypd %>%
+  filter(occur_year >= 2020) %>%
+  group_by(occur_month) %>%
+  summarize(
+    shootings = n(),
+    murders = sum(statistical_murder_flag == TRUE),
+    pct_murder = round(sum(murders) / sum(shootings) * 100, digits = 1)
+  )
+month_shootings
+```
+
+```{r month_shootings_plot, echo=TRUE}
+#Plot the Bar Chart
+month_shootings %>%
+  ggplot(aes(x = occur_month, y = shootings, fill = shootings)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = "New York Shootings by Month of Year", y = NULL) +
+  xlab("Month of Year") +
+  ylab("Shootings")
+```
+
+__Conclusion__: The 3 worst months for shootings are June, July, and August.
+
+### What is the Most Deadly Boroughs for Shootings for the Past 3 Years?
+
+```{r top_boro_last_3, echo=TRUE}
+#Create a summarized dataset
+top_boro_last_3 <- boro_over_time %>%
+  filter(occur_year >= 2019) %>%
+  group_by(boro) %>%
+  summarize(
+    shootings = sum(shootings),
+    murders = sum(murders),
+    pct_murder = round(sum(murders) / sum(shootings) * 100, digits = 1)
+  )
+top_boro_last_3
+```
+
+```{r top_boro_last_3_plot, echo=TRUE}
+#Plot the bar chart
+top_boro_last_3 %>%
+  ggplot(aes(x = pct_murder, y = boro, fill = boro)) +
+  geom_bar(stat = "identity") +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = "New York Percent of Shootings Resulting in Murder", y = NULL,
+       fill = "Boroughs") +
+  xlab("Percent Resulting in Murder") +
+  ylab("Borough")
+```
+
+__Conclusion__: Staten Island in the most deadly place to be part of a shooting (results in the highest murders per shooting).
+
+### What pattern of shootings do we see for age groups?
+
+```{r nypd_age_group, echo=TRUE}
+#create an aggregate data set of perp age group and victim age groop
+nypd_age_group <- tidy_nypd %>%
+  group_by(perp_age_group, vic_age_group) %>%
+  summarize(
+    shootings = n(),
+    murders = sum(statistical_murder_flag == TRUE),
+    pct_murder = sum(statistical_murder_flag == TRUE) / n()
+  )
+
+nypd_age_group
+```
+
+```{r nypd_age_group_plot, echo=TRUE}
+#create the heatmap
+nypd_age_group %>%
+  filter(!is.na(perp_age_group)
+         & !is.na(vic_age_group)
+         & perp_age_group != "Unknown"
+         & vic_age_group != "Unknown"
+        ) %>%
+  ggplot(aes(x = perp_age_group, y = vic_age_group)) +
+  geom_raster(aes(fill = shootings)) +
+  theme(legend.position = "right",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = "Heatmap of New York Shootings by Age Group", y = NULL,
+       fill = "Shootings") +
+  xlab("Perpetrator Age Group") +
+  ylab("Victim Age Group")
+```
+
+__Conclusion__: Most shootings happen with your own age group, for example, the highest rate of shootings are committed by people aged 25-44 against victims who are also 25-44.
+
+### Additional Questions to Explore and Investigate
+
+After completing some initial analysis and visualization, there is much more to explore and investigate.  The following is a list of some potential questions to answer:
+
+1. Is there any interaction or correlation between perpetrator gender and the victims?
+1. Is there any interaction or correlation between perpetrator gender and the victims?
+1. What month are you most likely to observe a shooting?
+1. Can we predict the level of shootings based on the current data? how accurately?
+1. What time of day are you most likely to observe a shooting? Does it vary by jurisdiction?
+1. Does temperature affect how many shootings occur?
+
+## Models & Conclusions
+
+### Create Linear Prediction Models
+
+```{r peek_nypd_over_time, echo=TRUE}
+#show the data source to be used in the model
+head(nypd_over_time, n = 3)
+```
+
+```{r nypd_over_time_scatter, echo=TRUE}
+#build a Scatter Plot of shootings vs. murders
+nypd_over_time %>%
+  ggplot(aes(x = shootings, y = murders)) +
+  geom_point(aes(color = "shootings")) + 
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 90)) +
+  labs(title = "New York Shootings and Murders", y = NULL) +
+  xlab("Shootings") +
+  ylab("Murders")
+```
+
+```{r create_linear_model, echo=TRUE}
+#create the Prediction Model
+mod <- lm(murders ~ shootings, data = nypd_over_time)
+summary(mod)
+```
+
+```{r add_predictions_to_data_frame, echo=TRUE}
+#Add the predictions to a data frame
+nypd_over_time_w_pred <- nypd_over_time %>%
+  modelr::add_predictions(mod)
+nypd_over_time_w_pred
+```
+
+```{r plot_w_pred, echo=TRUE}
+#plot the actual values and predictions
+nypd_over_time_w_pred %>% ggplot() +
+  geom_point(aes(x = shootings, y = murders), color = "blue") +
+  geom_point(aes(x = shootings, y = pred), color = "red")
+```
+
+__Conclusion__: While there is a relationship and some correlation between shootings and murders, its not as strong as one might think.  Further analysis is required to identify other strong predictors of murders.
+
+### Conclusions
+
+After completing the analysis of data, visualization, and modeling, we can conclude the following:
+
+| Question                                  |  Conclusion                                  |
+|-------------------------------------------|----------------------------------------------|
+| How many shootings occur per day?         | On average in 2021 there were 5 shooting incidents each day in New York City and that they resulted in at least 1 or more murders every day. |
+| What is the trend of shootings over time? | After 2000, there was a noticeable increase in shootings on a monthly basis (pulling up murders as well). |
+| What borough has the most shootings?      | The Bronx and Brooklyn tend to account for the majority of the shooting incidents in NYC. |
+| What time of day has the most shootings?  | The 3 worst hours of the day for shootings are 10pm, 11pm, and 12pm. |
+| what month has the most shootings?        | The 3 worst months for shootings are June, July, and August. |
+| What is the most deadly borough?          | Stanten Island in the most deadly place to be part of a shooting (results in the highest murders per shooting). |
+| What age group shoots what age group?     | Most shootings happen with your own age group, for example, the highest rate of shootings are committed by people aged 25-44 against victims who are also 25-44. |
+| Is there a strong correlation between shootings and murders? | While there is a relationship and some correlation between shootings and murders, its not as strong as one might think.  Further analysis is required to identify other strong predictors of murder. |
+
+## Review of Bias
+
+Considering Bias, I would place it into 3 categories:
+
+1. Who is providing the data
+2. Who is collecting the data
+3. Who is analyzing the data
+
+__Provider__: As the data is based on incident reports and manually extracted from witnesses and victoms, the bias of people is included in the data. Details abvout the suspect are observations and likely concrete data. The shooting incident was observed through bias eyes and bias factors were likely collected.
+
+
+__Collector__: The incident reports that sit behind the data are collected by police officers. What is document is shaped by their thoughts, opinions, and bias as a police officer.  It is unclear whether all the factors are provided by victim or are assessed by the officer.  How the data is collected at the point of the incident and potentially at the point of interpretation when the data set is built.  All of this can shape what is in the data source and include individuals bias in the collection process.
+
+
+__Analyzer__: As the analyst, I bring my own biases to the data. I am an urban resident, so in some ways I may thing I understand the dynamics of city life and city crime. On the other hand, I am a white male who has little exposure to gun violence and no exposure to policing. I am not a subject matter expert in this area and may not interpret the details or factors correctly.  I also bring to the analysis my own assumptions and bias about sex, age, race, and ethnicity.
+
+## Session Summary
+
+```{r session_info, echo=TRUE}
+sessionInfo()
+```
